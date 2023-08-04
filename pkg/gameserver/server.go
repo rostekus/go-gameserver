@@ -1,9 +1,10 @@
 package gameserver
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
 	"net/http"
 
 	"github.com/anthdm/hollywood/actor"
@@ -11,73 +12,50 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Position struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
+var logger = logrus.New()
 
-type PlayerState struct {
-	Health   int      `json:"health"`
-	Position Position `json:"position"`
-}
-
-type WSMessage struct {
-	Type string `json:"type"`
-	Data []byte `json:"data"`
-}
 type GameServer struct {
 	GameServerConfig
+	ctx      *actor.Context
+	sessions map[*actor.PID]struct{}
 }
 
 type GameServerConfig struct {
-	Port   string
-	Logger *logrus.Logger
+	Port string
 }
 
 func DefaultGameServer() actor.Receiver {
-	logger := logrus.New()
 
 	return &GameServer{
-		GameServerConfig{
-			Port:   ":4000",
-			Logger: logger,
-		},
+		GameServerConfig: GameServerConfig{
+			Port: ":4000",
+		}, sessions: make(map[*actor.PID]struct{}),
 	}
 }
 
 func (s *GameServer) Receive(ctx *actor.Context) {
 	switch msg := ctx.Message().(type) {
 	case actor.Started:
-		s.Logger.Println("GameServer has started", msg)
+		s.ctx = ctx
+		_ = msg
 		s.startHTTPServer()
 	}
 
 }
 
 func (s *GameServer) handleWS(w http.ResponseWriter, r *http.Request) {
-	s.Logger.Println("New Connection")
+	logger.Println("New Connection")
 	conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
 	if err != nil {
-		s.Logger.Errorf("Cannot upgrade connetion: %v\n", err)
+		logger.Errorf("Cannot upgrade connetion: %v\n", err)
 	}
-	msg := []byte("hello")
-	conn.WriteMessage(websocket.BinaryMessage, msg)
-	for {
-		var msg WSMessage
-		for {
-			if err := conn.ReadJSON(&msg); err != nil {
-				fmt.Println("read error", err)
-				return
-			}
-			var pos PlayerState
-			json.Unmarshal(msg.Data, &pos)
-			fmt.Printf("pos %+v\n", pos)
-		}
-	}
+	sid := rand.Intn(math.MaxInt)
+	pid := s.ctx.SpawnChild(newPlayerSession(sid, conn), fmt.Sprintf("session_%d", sid))
+	s.sessions[pid] = struct{}{}
 }
 
 func (s *GameServer) startHTTPServer() {
-	s.Logger.Printf("Listening on port: %s", s.Port)
+	logger.Printf("Listening on port: %s", s.Port)
 	go func() {
 		http.HandleFunc("/ws", s.handleWS)
 		log.Panic(http.ListenAndServe(s.Port, nil))
