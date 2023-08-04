@@ -2,7 +2,6 @@ package gameserver
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -14,50 +13,62 @@ import (
 
 var logger = logrus.New()
 
-type GameServer struct {
-	GameServerConfig
-	ctx      *actor.Context
-	sessions map[*actor.PID]struct{}
-}
-
 type GameServerConfig struct {
 	Port string
 }
 
-func DefaultGameServer() actor.Receiver {
+type GameServer struct {
+	GameServerConfig
+	ctx      *actor.Context
+	sessions map[int]*actor.PID
+}
 
+func DefaultGameServer() actor.Receiver {
 	return &GameServer{
 		GameServerConfig: GameServerConfig{
-			Port: ":4000",
-		}, sessions: make(map[*actor.PID]struct{}),
+			Port: ":4000"},
+		sessions: make(map[int]*actor.PID),
 	}
 }
 
-func (s *GameServer) Receive(ctx *actor.Context) {
-	switch msg := ctx.Message().(type) {
+func (s *GameServer) Receive(c *actor.Context) {
+	switch msg := c.Message().(type) {
+	case *PlayerState:
+		s.bcast(c.Sender(), msg)
 	case actor.Started:
-		s.ctx = ctx
-		_ = msg
 		s.startHTTPServer()
+		s.ctx = c
+		_ = msg
+	default:
+		logger.Println("recv", msg)
 	}
-
 }
 
-func (s *GameServer) handleWS(w http.ResponseWriter, r *http.Request) {
-	logger.Println("New Connection")
-	conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
-	if err != nil {
-		logger.Errorf("Cannot upgrade connetion: %v\n", err)
+func (s *GameServer) bcast(from *actor.PID, state *PlayerState) {
+	for _, pid := range s.sessions {
+		if !pid.Equals(from) {
+			s.ctx.Send(pid, state)
+		}
 	}
-	sid := rand.Intn(math.MaxInt)
-	pid := s.ctx.SpawnChild(newPlayerSession(sid, conn), fmt.Sprintf("session_%d", sid))
-	s.sessions[pid] = struct{}{}
 }
 
 func (s *GameServer) startHTTPServer() {
 	logger.Printf("Listening on port: %s", s.Port)
 	go func() {
 		http.HandleFunc("/ws", s.handleWS)
-		log.Panic(http.ListenAndServe(s.Port, nil))
+		http.ListenAndServe(s.Port, nil)
 	}()
+}
+
+// handles the upgrade of the websocket
+func (s *GameServer) handleWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+	if err != nil {
+		logger.Errorf("Cannot upgrade connetion: %v\n", err)
+		return
+	}
+	logger.Println("New Connection")
+	sid := rand.Intn(math.MaxInt)
+	pid := s.ctx.SpawnChild(newPlayerSession(s.ctx.PID(), sid, conn), fmt.Sprintf("session_%d", sid))
+	s.sessions[sid] = pid
 }
