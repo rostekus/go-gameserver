@@ -1,28 +1,40 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/gorilla/websocket"
+	"github.com/nsf/termbox-go"
 	"github.com/rostekus/go-game-server/pkg/client"
 )
 
 const wsServerEndpoint = "ws://localhost:4000/ws"
 
 func main() {
-	dialer := websocket.Dialer{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-	conn, _, err := dialer.Dial(wsServerEndpoint, nil)
+	err := termbox.Init()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to init termbox: %v", err)
 	}
-	c := client.NewGameClient(conn, "James")
+	defer termbox.Close()
+	w, h := termbox.Size()
+
+	cfg := client.NewGameConfig(wsServerEndpoint, w, h)
+	c := client.NewGameClient("James", cfg)
 	if err := c.Login(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		os.Exit(-1)
 	}
 	c.Start()
-	select {}
 
+	interruptChan := make(chan os.Signal, 1)
+	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
+
+	<-interruptChan
+
+	fmt.Println("Received interrupt signal. Exiting gracefully...")
+
+	os.Exit(0)
 }
