@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -10,12 +9,13 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rostekus/go-game-server/pkg/game"
-	"github.com/rostekus/go-game-server/pkg/gameserver"
+	pr "github.com/rostekus/go-game-server/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 type GameClient struct {
 	conn     *websocket.Conn
-	clientID int
+	clientID int32
 	username string
 	game     *game.Game
 	gameClientConfig
@@ -36,7 +36,7 @@ func NewGameConfig(wsServerEndpoint string, w, h int) gameClientConfig {
 
 func NewGameClient(username string, cfg gameClientConfig) *GameClient {
 	return &GameClient{
-		clientID:         rand.Intn(math.MaxInt),
+		clientID:         int32(rand.Intn(math.MaxInt)),
 		username:         username,
 		gameClientConfig: cfg,
 	}
@@ -47,35 +47,46 @@ func (c *GameClient) Login() error {
 		log.Println("cannot connect to server")
 		return err
 	}
-	b, err := json.Marshal(gameserver.Login{
+	loginData := pr.Login{
 		ClientID: c.clientID,
 		Username: c.username,
-	})
+	}
+	b, err := proto.Marshal(&loginData)
 	if err != nil {
 		return err
 	}
-	msg := gameserver.WSMessage{
+	msg := pr.WSMessage{
 		Type: "login",
 		Data: b,
 	}
-	return c.conn.WriteJSON(msg)
+	dataBytes, err := proto.Marshal(&msg)
+	if err != nil {
+		return err
+	}
+	return c.conn.WriteMessage(websocket.BinaryMessage, dataBytes)
 }
 
 func (gc *GameClient) poolState() {
-	var msg gameserver.WSMessage
+	var msg pr.WSMessage
 	for {
-		if err := gc.conn.ReadJSON(&msg); err != nil {
+		_, dataBytes, err := gc.conn.ReadMessage()
+		if err != nil {
+			fmt.Println("WS read error", err)
+			continue
+		}
+		err = proto.Unmarshal(dataBytes, &msg)
+		if err != nil {
 			fmt.Println("WS read error", err)
 			continue
 		}
 		switch msg.Type {
 		case "state":
-			var state gameserver.PlayerState
-			if err := json.Unmarshal(msg.Data, &state); err != nil {
+			var state pr.PlayerState
+			if err := proto.Unmarshal(msg.Data, &state); err != nil {
 				fmt.Println("WS read error", err)
 				continue
 			}
-			gc.game.AddOnlinePlayer(state.Position.X, state.Position.Y, "player")
+			gc.game.AddOnlinePlayer(state.Position.Pos, "player")
 		}
 	}
 
@@ -104,20 +115,31 @@ func (gc *GameClient) initConnToServer(wsServerEndpoint string) error {
 func (gc *GameClient) sendPos() {
 	for {
 		x, y := gc.game.GetPosSnake()
-		state := gameserver.PlayerState{
-			Health:   100,
-			Position: gameserver.Position{X: x, Y: y},
+		pos := make([]int32, 2)
+		pos[0] = int32(x)
+		pos[1] = int32(y)
+		position := pr.Position{
+			Pos: pos,
 		}
-		b, err := json.Marshal(state)
+		state := pr.PlayerState{
+			Position: &position,
+		}
+		b, err := proto.Marshal(&state)
 		if err != nil {
 			log.Println(err)
+			continue
 		}
 
-		msg := gameserver.WSMessage{
+		msg := pr.WSMessage{
 			Type: "playerState",
 			Data: b,
 		}
-		if err := gc.conn.WriteJSON(msg); err != nil {
+		dataBytes, err := proto.Marshal(&msg)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if err := gc.conn.WriteMessage(websocket.BinaryMessage, dataBytes); err != nil {
 			log.Fatal(err)
 		}
 		// TODO(@rostekus) add channel

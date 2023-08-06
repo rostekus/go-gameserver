@@ -79,8 +79,8 @@ func (g *Game) drawObject(object Drawable) {
 
 }
 
-func (g *Game) AddOnlinePlayer(x, y int, username string) {
-	g.onlinePlayers[username] = &Fruit{x, y}
+func (g *Game) AddOnlinePlayer(pos []int32, username string) {
+	g.onlinePlayers[username] = &Fruit{int(pos[0]), int(pos[1])}
 }
 
 func (g *Game) drawPlayers() {

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option go_package = "github.com/rostekus/go-gameserver";
+
+package proto;
+
+message WSMessage {
+  string type = 1;
+  bytes data = 2;
+}
+
+message Login {
+  int32 clientID = 1;
+  string username = 2;
+}
+
+message Position {
+  repeated int32 pos = 1;
+}
+
+message PlayerState {
+  Position position = 1;
+  int32 sessionID = 2;
+}
+
