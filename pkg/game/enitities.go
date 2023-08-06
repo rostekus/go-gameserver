@@ -1,9 +1,6 @@
 package game
 
 import (
-	"log"
-	"math/rand"
-
 	"github.com/nsf/termbox-go"
 )
 
@@ -16,23 +13,34 @@ const (
 	fruitBgColor = termbox.ColorDefault
 )
 
-type coord struct {
+type Drawable interface {
+	Draw() (int, int, rune, termbox.Attribute, termbox.Attribute)
+	Move(x, y int)
+}
+
+type Snake struct {
 	x, y int
 }
 
-type snake struct {
-	pos coord
+type Fruit struct {
+	x, y int
 }
 
-type fruit struct {
-	pos coord
+func (s *Snake) Draw() (int, int, rune, termbox.Attribute, termbox.Attribute) {
+
+	return s.x, s.y, snakeBody, snakeFgColor, snakeBgColor
 }
 
-func newSnake(maxX, maxY int) snake {
-	return snake{coord{rand.Intn(maxX), rand.Intn(maxY)}}
+func (f *Fruit) Draw() (int, int, rune, termbox.Attribute, termbox.Attribute) {
+	return f.x, f.y, fruitBody, fruitFgColor, fruitBgColor
 }
 
-func newFruit(maxX, maxY int) fruit {
-	log.Println(" fruit ", rand.Intn(maxX))
-	return fruit{coord{rand.Intn(maxX), rand.Intn(maxY)}}
+func (f *Fruit) Move(x, y int) {
+	f.x = x
+	f.y = y
+}
+
+func (s *Snake) Move(x, y int) {
+	s.x = x
+	s.y = y
 }

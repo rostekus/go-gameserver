@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -14,79 +13,108 @@ func writeText(x, y int, s string, fg, bg termbox.Attribute) {
 	}
 }
 
+type velocity struct {
+	x, y int
+}
+
 type Game struct {
-	sn    snake
-	score int
-	v     coord
-	frt   fruit
-	// Game field dimensions.
-	fieldWidth, fieldHeight int
+	sn            *Snake
+	score         int
+	v             velocity
+	frt           *Fruit
+	fieldWidth    int
+	fieldHeight   int
+	onlinePlayers map[string]Drawable
 }
 
-func NewGame(w, h int) Game {
-	return Game{
-		fieldWidth:  w,
-		fieldHeight: h,
-		sn:          newSnake(w, h),
-		frt:         newFruit(w, h),
-		v:           coord{1, 0},
-		score:       0,
+func NewGame(w, h int) *Game {
+	game := Game{
+		fieldWidth:    w,
+		fieldHeight:   h,
+		sn:            NewRandomSnake(w, h),
+		frt:           NewRandomFruit(w, h),
+		v:             velocity{1, 0},
+		score:         0,
+		onlinePlayers: make(map[string]Drawable),
 	}
+	game.onlinePlayers["player"] = NewRandomFruit(w, h)
+	return &game
 }
 
-func drawSnakePosition(g *Game) {
-	str := fmt.Sprintf("(score : %d, %d) (%d, %d)", g.score, g.frt.pos.y, g.v.x, g.v.y)
-	writeText(g.fieldWidth-len(str), 0, str, snakeFgColor, snakeBgColor)
+func NewRandomSnake(maxX, maxY int) *Snake {
+	return &Snake{rand.Intn(maxX), rand.Intn(maxY)}
 }
 
-func drawSnake(sn snake) {
-	termbox.SetCell(sn.pos.x, sn.pos.y, snakeBody, snakeFgColor, snakeBgColor)
+func NewRandomFruit(maxX, maxY int) *Fruit {
+	return &Fruit{rand.Intn(maxX), rand.Intn(maxY)}
 }
-
-func drawFruit(frt fruit) {
-	termbox.SetCell(frt.pos.x, frt.pos.y, fruitBody, fruitFgColor, snakeBgColor)
+func (g *Game) isFruitEaten() bool {
+	if g.sn.x == g.frt.x && g.sn.y == g.frt.y {
+		return true
+	}
+	return false
 }
-
+func (g *Game) incScore() {
+	g.score++
+}
+func (g *Game) newFruit() {
+	g.frt.y = rand.Intn(g.fieldHeight)
+	g.frt.x = rand.Intn(g.fieldWidth)
+}
 func (g *Game) draw() {
 	termbox.Clear(snakeFgColor, snakeBgColor)
-	drawSnakePosition(g)
-	drawSnake(g.sn)
-	if g.sn.pos.x == g.frt.pos.x && g.sn.pos.y == g.frt.pos.y {
-		g.frt.pos.y = rand.Intn(10)
-		g.frt.pos.x = rand.Intn(10)
-		g.score++
+	if g.isFruitEaten() {
+		g.incScore()
+		g.newFruit()
 	}
-	drawFruit(g.frt)
+
+	g.sn.Draw()
+	g.drawObject(g.sn)
+	g.drawObject(g.frt)
+	g.drawPlayers()
 	termbox.Flush()
 }
+func (g *Game) drawObject(object Drawable) {
+	termbox.SetCell(object.Draw())
 
-func moveSnake(s snake, v coord, fw, fh int) snake {
-	s.pos.x = s.pos.x + v.x
-	s.pos.y = s.pos.y + v.y
-	return s
+}
+
+func (g *Game) AddOnlinePlayer(x, y int, username string) {
+	g.onlinePlayers[username] = &Fruit{x, y}
+}
+
+func (g *Game) drawPlayers() {
+	for _, v := range g.onlinePlayers {
+		g.drawObject(v)
+	}
+}
+
+func (g *Game) moveSnake() {
+	if g.sn.x+g.v.x < g.fieldWidth && g.sn.x+g.v.x > 0 {
+		if g.sn.y+g.v.y < g.fieldHeight && g.sn.y+g.v.y > 0 {
+			x := g.sn.x + g.v.x
+			y := g.sn.y + g.v.y
+			g.sn.Move(x, y)
+		}
+	}
 }
 
 func (g *Game) step() {
-	if g.sn.pos.x+g.v.x < g.fieldWidth && g.sn.pos.x+g.v.x >= 0 {
-		if g.sn.pos.y+g.v.y < g.fieldHeight && g.sn.pos.y+g.v.y > 0 {
-			g.sn = moveSnake(g.sn, g.v, g.fieldWidth, g.fieldHeight)
-		}
-	}
-
+	g.moveSnake()
 	g.draw()
 }
 
-func (g *Game) moveLeft()  { g.v = coord{-1, 0} }
-func (g *Game) moveRight() { g.v = coord{1, 0} }
-func (g *Game) moveUp()    { g.v = coord{0, -1} }
-func (g *Game) moveDown()  { g.v = coord{0, 1} }
-
 func (g *Game) GetPosSnake() (int, int) {
-	return g.sn.pos.x, g.sn.pos.y
+	return g.sn.x, g.sn.y
 }
 
-func (g *Game) Start() {
+func (g *Game) moveLeft()  { g.v = velocity{-1, 0} }
+func (g *Game) moveRight() { g.v = velocity{1, 0} }
+func (g *Game) moveUp()    { g.v = velocity{0, -1} }
+func (g *Game) moveDown()  { g.v = velocity{0, 1} }
 
+func (g *Game) Start() {
+	rand.Seed(time.Now().UnixNano())
 	eventQueue := make(chan termbox.Event)
 	go func() {
 		for {
