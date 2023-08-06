@@ -8,6 +8,7 @@ import (
 
 	"github.com/anthdm/hollywood/actor"
 	"github.com/gorilla/websocket"
+	pr "github.com/rostekus/go-game-server/proto"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,7 +34,7 @@ func DefaultGameServer() actor.Receiver {
 
 func (s *GameServer) Receive(c *actor.Context) {
 	switch msg := c.Message().(type) {
-	case *PlayerState:
+	case *pr.PlayerState:
 		s.bcast(c.Sender(), msg)
 	case actor.Started:
 		s.startHTTPServer()
@@ -44,7 +45,7 @@ func (s *GameServer) Receive(c *actor.Context) {
 	}
 }
 
-func (s *GameServer) bcast(from *actor.PID, state *PlayerState) {
+func (s *GameServer) bcast(from *actor.PID, state *pr.PlayerState) {
 	for _, pid := range s.sessions {
 		if !pid.Equals(from) {
 			s.ctx.Send(pid, state)
