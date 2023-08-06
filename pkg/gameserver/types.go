@@ -1,5 +1,10 @@
 package gameserver
 
+type WSMessage struct {
+	Type string `json:"type"`
+	Data []byte `json:"data"`
+}
+
 type Login struct {
 	ClientID int    `json:"clientID"`
 	Username string `json:"username"`
@@ -11,11 +16,7 @@ type Position struct {
 }
 
 type PlayerState struct {
-	Health   int      `json:"health"`
-	Position Position `json:"position"`
-}
-
-type WSMessage struct {
-	Type string `json:"type"`
-	Data []byte `json:"data"`
+	Health    int      `json:"health"`
+	Position  Position `json:"position"`
+	SessionID int
 }

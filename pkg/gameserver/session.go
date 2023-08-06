@@ -14,21 +14,43 @@ type PlayerSession struct {
 	username  string
 	inLobby   bool
 	conn      *websocket.Conn
+	ctx       *actor.Context
+	serverPID *actor.PID
 }
 
-func newPlayerSession(sid int, conn *websocket.Conn) actor.Producer {
+func newPlayerSession(serverPID *actor.PID, sid int, conn *websocket.Conn) actor.Producer {
 	return func() actor.Receiver {
 		return &PlayerSession{
 			conn:      conn,
 			sessionID: sid,
+			serverPID: serverPID,
 		}
 	}
 }
 
 func (s *PlayerSession) Receive(c *actor.Context) {
-	switch c.Message().(type) {
+	switch msg := c.Message().(type) {
 	case actor.Started:
-		s.readLoop()
+		s.ctx = c
+		go s.readLoop()
+	case *PlayerState:
+		s.sendPlayerState(msg)
+	default:
+		fmt.Println("recv", msg)
+	}
+}
+
+func (s *PlayerSession) sendPlayerState(state *PlayerState) {
+	b, err := json.Marshal(state)
+	if err != nil {
+		panic(err)
+	}
+	msg := WSMessage{
+		Type: "state",
+		Data: b,
+	}
+	if err := s.conn.WriteJSON(msg); err != nil {
+		panic(err)
 	}
 }
 
@@ -57,6 +79,9 @@ func (s *PlayerSession) handleMessage(msg WSMessage) {
 		if err := json.Unmarshal(msg.Data, &ps); err != nil {
 			panic(err)
 		}
-		fmt.Println(ps)
+		ps.SessionID = s.sessionID
+		if s.ctx != nil {
+			s.ctx.Send(s.serverPID, &ps)
+		}
 	}
 }
