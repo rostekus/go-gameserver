@@ -114,10 +114,7 @@ func (gc *GameClient) initConnToServer(wsServerEndpoint string) error {
 
 func (gc *GameClient) sendPos() {
 	for {
-		x, y := gc.game.GetPosSnake()
-		pos := make([]int32, 2)
-		pos[0] = int32(x)
-		pos[1] = int32(y)
+		pos := gc.game.GetPosSnake()
 		position := pr.Position{
 			Pos: pos,
 		}
