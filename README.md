@@ -22,6 +22,8 @@ The actor model is a concurrency model that treats actors as fundamental units o
 
 - Protocol Buffers (protobuf): To optimize data serialization and deserialization, Protocol Buffers are used for message exchange between clients and the server.
 
+![Untitled Diagram drawio](https://github.com/rostekus/go-gameserver/assets/34031791/b61c8244-f5ac-4c53-892f-8f22b381d309)
+
 ### Prerequisites
 
 - Golang installed on your system.
